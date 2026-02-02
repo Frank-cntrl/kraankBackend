@@ -102,4 +102,46 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+// POST /api/users/login - Simple login (no password required)
+// Just verifies user exists and returns user info
+router.post("/login", async (req, res, next) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ message: "Username is required" });
+    }
+
+    const normalizedUsername = username.toLowerCase();
+
+    // Only allow frank and keily to login
+    if (!["frank", "keily"].includes(normalizedUsername)) {
+      return res.status(403).json({ message: "Access denied. This app is only for Frank and Keily 💕" });
+    }
+
+    // Find or create the user
+    let user = await User.findOne({ where: { username: normalizedUsername } });
+
+    if (!user) {
+      // Create the user if they don't exist
+      user = await User.create({
+        username: normalizedUsername,
+        email: null,
+      });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id.toString(),
+        username: user.username,
+        displayName: user.username.charAt(0).toUpperCase() + user.username.slice(1),
+      },
+      message: `Welcome back, ${user.username.charAt(0).toUpperCase() + user.username.slice(1)}! 💕`,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
