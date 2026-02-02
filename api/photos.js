@@ -47,10 +47,15 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 
-// GET /api/photos - Get all photos
+// GET /api/photos - Get all photos (with optional userId filter)
 router.get("/", async (req, res, next) => {
   try {
+    const { userId } = req.query;
+    
+    const whereClause = userId ? { userId } : {};
+    
     const photos = await Photo.findAll({
+      where: whereClause,
       order: [["uploadedAt", "DESC"]],
     });
     res.json(photos);
