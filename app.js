@@ -13,12 +13,14 @@ const initSocketServer = require("./socket-server");
 const PORT = process.env.PORT || 8080;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
-// body parser middleware
-app.use(express.json());
+// body parser middleware - increase limit for image uploads
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+// CORS configuration - allow all origins for mobile app
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: true, // Allow all origins (for mobile app)
     credentials: true,
   })
 );
@@ -31,10 +33,15 @@ app.use(express.static(path.join(__dirname, "public"))); // serve static files f
 app.use("/api", apiRouter); // mount api router
 app.use("/auth", authRouter); // mount auth router
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.sendStatus(500);
+  res.status(500).json({ error: err.message || "Internal server error" });
 });
 
 const runApp = async () => {
