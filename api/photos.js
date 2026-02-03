@@ -3,7 +3,8 @@ const router = express.Router();
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const sharp = require("sharp");
-const { Photo } = require("../database");
+const { Photo, Streak, DeviceToken } = require("../database");
+const { sendPushNotification } = require("../services/notifications");
 
 // Image resize settings
 const MAX_WIDTH = 1200;  // Max width for photos
@@ -72,6 +73,102 @@ const uploadToCloudinary = (buffer) => {
     uploadStream.end(buffer);
   });
 };
+
+// Helper: Check if both users uploaded within the streak window
+function bothUploadedRecently(streak) {
+  if (!streak.lastFrankUpload || !streak.lastKeilyUpload) return false;
+  
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+  
+  const frankRecent = new Date(streak.lastFrankUpload) > twentyFourHoursAgo;
+  const keilyRecent = new Date(streak.lastKeilyUpload) > twentyFourHoursAgo;
+  
+  return frankRecent && keilyRecent;
+}
+
+// Helper function to update streak after photo upload
+async function updateStreak(userId) {
+  const normalizedUserId = userId.toLowerCase();
+  
+  // Get or create streak
+  let streak = await Streak.findOne();
+  if (!streak) {
+    streak = await Streak.create({
+      currentStreak: 0,
+      longestStreak: 0,
+      isActive: false,
+    });
+  }
+  
+  const now = new Date();
+  
+  // Check if streak expired
+  if (streak.streakExpiresAt && now > new Date(streak.streakExpiresAt)) {
+    await streak.update({
+      currentStreak: 0,
+      isActive: false,
+      streakExpiresAt: null,
+    });
+  }
+  
+  // Update the user's last upload time
+  const updateData = {};
+  if (normalizedUserId === "frank") {
+    updateData.lastFrankUpload = now;
+  } else {
+    updateData.lastKeilyUpload = now;
+  }
+  
+  await streak.update(updateData);
+  await streak.reload();
+  
+  // Check if both users have now uploaded within 24 hours
+  if (bothUploadedRecently(streak)) {
+    if (!streak.isActive) {
+      // Start new streak
+      const frankUpload = new Date(streak.lastFrankUpload);
+      const keilyUpload = new Date(streak.lastKeilyUpload);
+      const earlierUpload = frankUpload < keilyUpload ? frankUpload : keilyUpload;
+      
+      await streak.update({
+        currentStreak: 1,
+        longestStreak: Math.max(streak.longestStreak, 1),
+        isActive: true,
+        streakStartDate: earlierUpload,
+        streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      });
+    } else {
+      // Increment streak
+      const newStreak = streak.currentStreak + 1;
+      await streak.update({
+        currentStreak: newStreak,
+        longestStreak: Math.max(streak.longestStreak, newStreak),
+        streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      });
+    }
+  } else if (!streak.isActive) {
+    // One person uploaded, set expiry
+    const lastUpload = streak.lastFrankUpload || streak.lastKeilyUpload;
+    await streak.update({
+      streakExpiresAt: new Date(new Date(lastUpload).getTime() + 24 * 60 * 60 * 1000),
+    });
+  }
+  
+  // Send notification to the other user
+  const otherUser = normalizedUserId === "frank" ? "keily" : "frank";
+  const displayName = normalizedUserId === "frank" ? "Frank" : "Keily";
+  
+  try {
+    await sendPushNotification(
+      otherUser,
+      "📸 New Photo!",
+      `${displayName} just uploaded a photo for you! 💕`
+    );
+  } catch (notifError) {
+    console.error("Failed to send notification:", notifError);
+  }
+}
 
 // GET /api/photos - Get all photos (with optional userId filter)
 router.get("/", async (req, res, next) => {
@@ -179,6 +276,14 @@ router.post("/upload", upload.single("image"), async (req, res, next) => {
       caption: caption || null,
       uploadedAt: new Date(),
     });
+
+    // Update streak
+    try {
+      await updateStreak(userId);
+    } catch (streakError) {
+      console.error("Failed to update streak:", streakError);
+      // Don't fail the upload if streak update fails
+    }
 
     res.status(201).json({
       success: true,

@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "Backend server for Krannk photo sharing app",
   "dependencies": {
+    "apn": "^2.2.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.0.0",
     "cookie-parser": "^1.4.7",
