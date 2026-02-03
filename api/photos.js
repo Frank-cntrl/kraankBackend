@@ -2,7 +2,13 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
+const sharp = require("sharp");
 const { Photo } = require("../database");
+
+// Image resize settings
+const MAX_WIDTH = 1200;  // Max width for photos
+const MAX_HEIGHT = 1200; // Max height for photos
+const JPEG_QUALITY = 85; // Quality for JPEG compression
 
 // Configure multer for memory storage (we'll upload to Cloudinary)
 const storage = multer.memoryStorage();
@@ -26,6 +32,26 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// Helper function to resize image
+const resizeImage = async (buffer) => {
+  try {
+    const resizedBuffer = await sharp(buffer)
+      .rotate() // Auto-rotate based on EXIF orientation
+      .resize(MAX_WIDTH, MAX_HEIGHT, {
+        fit: 'inside',           // Maintain aspect ratio, fit within bounds
+        withoutEnlargement: true // Don't upscale small images
+      })
+      .jpeg({ quality: JPEG_QUALITY })
+      .toBuffer();
+    
+    return resizedBuffer;
+  } catch (error) {
+    console.error('Error resizing image:', error);
+    // Return original buffer if resize fails
+    return buffer;
+  }
+};
 
 // Helper function to upload to Cloudinary
 const uploadToCloudinary = (buffer) => {
@@ -139,8 +165,11 @@ router.post("/upload", upload.single("image"), async (req, res, next) => {
       });
     }
 
-    // Upload to Cloudinary
-    const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+    // Resize image before uploading
+    const resizedBuffer = await resizeImage(req.file.buffer);
+
+    // Upload resized image to Cloudinary
+    const cloudinaryResult = await uploadToCloudinary(resizedBuffer);
 
     // Create photo record in database
     const photo = await Photo.create({
