@@ -27,4 +27,24 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
+// POST /api/videos/seed - One-time seed from Cloudinary URLs
+router.post("/seed", async (req, res, next) => {
+  try {
+    const existing = await Video.count();
+    if (existing > 0) {
+      return res.json({ message: `Already seeded (${existing} videos exist)` });
+    }
+
+    const videos = req.body;
+    if (!Array.isArray(videos) || videos.length === 0) {
+      return res.status(400).json({ message: "Provide an array of video objects" });
+    }
+
+    const created = await Video.bulkCreate(videos);
+    res.json({ message: `Seeded ${created.length} videos` });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
