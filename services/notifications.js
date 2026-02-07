@@ -72,8 +72,11 @@ async function sendPushNotification(userId, title, body, data = {}) {
   notification.badge = 1;
   notification.sound = "default";
   notification.alert = { title, body };
-  notification.payload = { ...data, userId };
+  notification.payload = { ...data, userId, refreshWidget: true };
   notification.topic = process.env.APN_BUNDLE_ID || "com.krannk.app";
+  
+  // Enable content-available for silent background processing (widget refresh)
+  notification.contentAvailable = true;
   
   // Send to all device tokens
   const tokens = deviceTokens.map((dt) => dt.token);
