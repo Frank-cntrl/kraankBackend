@@ -123,8 +123,12 @@ async function updateStreak(userId) {
   await streak.update(updateData);
   await streak.reload();
   
+  // Get today's date as a string (YYYY-MM-DD) for tracking daily increments
+  const today = now.toISOString().split('T')[0];
+  const alreadyIncrementedToday = streak.lastStreakIncrementDate === today;
+  
   // Check if both users have now uploaded within 24 hours
-  if (bothUploadedRecently(streak)) {
+  if (bothUploadedRecently(streak) && !alreadyIncrementedToday) {
     if (!streak.isActive) {
       // Start new streak
       const frankUpload = new Date(streak.lastFrankUpload);
@@ -137,16 +141,23 @@ async function updateStreak(userId) {
         isActive: true,
         streakStartDate: earlierUpload,
         streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        lastStreakIncrementDate: today,
       });
     } else {
-      // Increment streak
+      // Increment streak (only once per day)
       const newStreak = streak.currentStreak + 1;
       await streak.update({
         currentStreak: newStreak,
         longestStreak: Math.max(streak.longestStreak, newStreak),
         streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        lastStreakIncrementDate: today,
       });
     }
+  } else if (bothUploadedRecently(streak) && alreadyIncrementedToday) {
+    // Both uploaded but already counted today - just extend the expiry
+    await streak.update({
+      streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+    });
   } else if (!streak.isActive) {
     // One person uploaded, set expiry
     const lastUpload = streak.lastFrankUpload || streak.lastKeilyUpload;
