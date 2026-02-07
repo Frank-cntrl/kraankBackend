@@ -170,12 +170,15 @@ async function updateStreak(userId) {
   const otherUser = normalizedUserId === "frank" ? "keily" : "frank";
   const displayName = normalizedUserId === "frank" ? "Frank" : "Keily";
   
+  console.log(`📸 Photo uploaded by ${displayName}, sending notification to ${otherUser}...`);
+  
   try {
-    await sendPushNotification(
+    const notifResult = await sendPushNotification(
       otherUser,
       "📸 New Photo!",
       `${displayName} just uploaded a photo for you! 💕`
     );
+    console.log(`📸 Notification result for ${otherUser}:`, JSON.stringify(notifResult));
   } catch (notifError) {
     console.error("Failed to send notification:", notifError);
   }
