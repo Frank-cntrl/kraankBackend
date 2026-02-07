@@ -7,12 +7,30 @@ let apnProvider = null;
 function getApnProvider() {
   if (!apnProvider && process.env.APN_KEY_ID && process.env.APN_TEAM_ID) {
     try {
-      apnProvider = new apn.Provider({
-        token: {
-          key: process.env.APN_KEY_PATH || "./AuthKey.p8", // Path to your .p8 file
+      // Support both file path and base64-encoded key
+      let keyConfig;
+      
+      if (process.env.APN_KEY_BASE64) {
+        // Decode base64 key
+        const keyBuffer = Buffer.from(process.env.APN_KEY_BASE64, 'base64');
+        keyConfig = {
+          key: keyBuffer.toString('utf8'),
           keyId: process.env.APN_KEY_ID,
           teamId: process.env.APN_TEAM_ID,
-        },
+        };
+      } else if (process.env.APN_KEY_PATH) {
+        keyConfig = {
+          key: process.env.APN_KEY_PATH,
+          keyId: process.env.APN_KEY_ID,
+          teamId: process.env.APN_TEAM_ID,
+        };
+      } else {
+        console.log("No APNs key configured - notifications will be mocked");
+        return null;
+      }
+      
+      apnProvider = new apn.Provider({
+        token: keyConfig,
         production: process.env.NODE_ENV === "production",
       });
     } catch (error) {
