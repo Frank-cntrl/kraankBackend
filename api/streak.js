@@ -203,4 +203,47 @@ router.post("/unregister-device", async (req, res, next) => {
   }
 });
 
+// GET /api/streak/devices - Debug: List registered devices
+router.get("/devices", async (req, res, next) => {
+  try {
+    const devices = await DeviceToken.findAll({
+      attributes: ['userId', 'platform', 'isActive', 'createdAt'],
+    });
+    
+    res.json({
+      count: devices.length,
+      devices: devices.map(d => ({
+        userId: d.userId,
+        platform: d.platform,
+        isActive: d.isActive,
+        createdAt: d.createdAt,
+        tokenPreview: '(hidden for security)'
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/streak/test-notification - Debug: Send a test notification
+router.post("/test-notification", async (req, res, next) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: "userId is required" });
+    }
+    
+    const result = await sendPushNotification(
+      userId,
+      "🧪 Test Notification",
+      "If you see this, push notifications are working!"
+    );
+    
+    res.json({ success: true, result });
+  } catch (error) {
+    res.json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
