@@ -31,8 +31,9 @@ function getApnProvider() {
       
       apnProvider = new apn.Provider({
         token: keyConfig,
-        production: process.env.NODE_ENV === "production",
+        production: process.env.APN_PRODUCTION === "true", // Explicitly control sandbox vs production
       });
+      console.log(`APNs provider initialized - Production mode: ${process.env.APN_PRODUCTION === "true"}`);
     } catch (error) {
       console.error("Failed to initialize APNs provider:", error);
     }
@@ -76,7 +77,15 @@ async function sendPushNotification(userId, title, body, data = {}) {
   
   // Send to all device tokens
   const tokens = deviceTokens.map((dt) => dt.token);
+  console.log(`Sending notification to ${tokens.length} device(s) for ${userId}`);
+  console.log(`Bundle ID: ${notification.topic}`);
+  
   const result = await provider.send(notification, tokens);
+  
+  console.log(`APNs result - Sent: ${result.sent?.length || 0}, Failed: ${result.failed?.length || 0}`);
+  if (result.failed && result.failed.length > 0) {
+    console.log("Failed notifications:", JSON.stringify(result.failed, null, 2));
+  }
   
   // Handle failed tokens (remove invalid ones)
   if (result.failed && result.failed.length > 0) {
