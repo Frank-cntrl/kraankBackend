@@ -98,8 +98,12 @@ router.post("/upload", async (req, res, next) => {
     await streak.update(updateData);
     await streak.reload();
     
+    // Get today's date as a string (YYYY-MM-DD)
+    const today = now.toISOString().split('T')[0];
+    const alreadyIncrementedToday = streak.lastStreakIncrementDate === today;
+    
     // Check if both users have now uploaded within 24 hours
-    if (bothUploadedToday(streak)) {
+    if (bothUploadedToday(streak) && !alreadyIncrementedToday) {
       // Calculate when the streak window started (the earlier of the two uploads)
       const frankUpload = new Date(streak.lastFrankUpload);
       const keilyUpload = new Date(streak.lastKeilyUpload);
@@ -112,16 +116,23 @@ router.post("/upload", async (req, res, next) => {
           isActive: true,
           streakStartDate: earlierUpload,
           streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // 24 hours from now
+          lastStreakIncrementDate: today,
         });
       } else {
-        // Increment streak and extend expiry
+        // Increment streak and extend expiry (only once per day)
         const newStreak = streak.currentStreak + 1;
         await streak.update({
           currentStreak: newStreak,
           longestStreak: Math.max(streak.longestStreak, newStreak),
           streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+          lastStreakIncrementDate: today,
         });
       }
+    } else if (bothUploadedToday(streak) && alreadyIncrementedToday) {
+      // Both uploaded but already counted today - just extend the expiry
+      await streak.update({
+        streakExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      });
     } else if (!streak.isActive && (streak.lastFrankUpload || streak.lastKeilyUpload)) {
       // One person uploaded, set expiry for when they need the other to upload
       const lastUpload = streak.lastFrankUpload || streak.lastKeilyUpload;

@@ -34,6 +34,10 @@ const Streak = db.define("streak", {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  lastStreakIncrementDate: {
+    type: DataTypes.DATEONLY, // Just the date, no time - e.g. "2026-02-07"
+    allowNull: true,
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
