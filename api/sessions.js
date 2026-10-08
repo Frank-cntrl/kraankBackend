@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { AppSession } = require("../database");
+const { AppSession, WidgetPing } = require("../database");
 
 // Helper: pull IP + approximate location from request headers (Vercel adds geo headers)
 function requestInfo(req) {
@@ -118,6 +118,36 @@ router.get("/", async (req, res, next) => {
     });
 
     res.json(sessions);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/sessions/pings - When was each person's device last seen fetching?
+// likelyDevice = whose app made the call. Recent rows for a person mean their
+// app is still installed and reaching the server (if their widget is active).
+router.get("/pings", async (req, res, next) => {
+  try {
+    const recent = await WidgetPing.findAll({
+      order: [["createdAt", "DESC"]],
+      limit: 50,
+    });
+
+    // Summarize the most recent ping per likely device
+    const lastSeen = {};
+    for (const ping of recent) {
+      const device = ping.likelyDevice;
+      if (device && !lastSeen[device]) {
+        lastSeen[device] = {
+          lastSeen: ping.createdAt,
+          city: ping.city,
+          region: ping.region,
+          country: ping.country,
+        };
+      }
+    }
+
+    res.json({ lastSeen, recent });
   } catch (error) {
     next(error);
   }

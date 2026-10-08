@@ -3,8 +3,31 @@ const router = express.Router();
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const sharp = require("sharp");
-const { Photo, Streak, DeviceToken } = require("../database");
+const { Photo, Streak, DeviceToken, WidgetPing } = require("../database");
 const { sendPushNotification } = require("../services/notifications");
+
+// Log a widget/app fetch so we can tell if a partner's app is still alive.
+// Fire-and-forget: never block or fail the photo response on this.
+function logWidgetPing(req, requestedUser) {
+  const header = (name) => {
+    const value = req.headers[name];
+    return value ? decodeURIComponent(value) : null;
+  };
+  const forwarded = req.headers["x-forwarded-for"];
+  const normalized = (requestedUser || "").toLowerCase();
+  const likelyDevice =
+    normalized === "frank" ? "keily" : normalized === "keily" ? "frank" : null;
+
+  WidgetPing.create({
+    requestedUser: normalized,
+    likelyDevice,
+    ipAddress: forwarded ? forwarded.split(",")[0].trim() : req.socket?.remoteAddress || null,
+    city: header("x-vercel-ip-city"),
+    region: header("x-vercel-ip-country-region"),
+    country: header("x-vercel-ip-country"),
+    userAgent: req.headers["user-agent"] || null,
+  }).catch((err) => console.error("Failed to log widget ping:", err.message));
+}
 
 // Image resize settings
 const MAX_WIDTH = 1200;  // Max width for photos
@@ -222,6 +245,9 @@ router.get("/latest", async (req, res, next) => {
 router.get("/latest/:userId", async (req, res, next) => {
   try {
     const { userId } = req.params;
+
+    // Record that someone's device fetched this user's latest photo
+    logWidgetPing(req, userId);
 
     const photo = await Photo.findOne({
       where: { userId },
