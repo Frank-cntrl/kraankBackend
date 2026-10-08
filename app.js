@@ -29,6 +29,23 @@ app.use(
 app.use(cookieParser());
 
 app.use(morgan("dev")); // logging middleware
+
+// Ensure tables exist before handling requests. On Vercel's serverless
+// runtime the top-level db.sync() in runApp() isn't reliably awaited before
+// requests arrive, so new tables (e.g. appSessions, widgetPings) may be
+// missing. Sync once per cold start and cache the promise.
+let dbReady = null;
+app.use(async (req, res, next) => {
+  try {
+    if (!dbReady) dbReady = db.sync();
+    await dbReady;
+    next();
+  } catch (err) {
+    dbReady = null; // allow a retry on the next request
+    next(err);
+  }
+});
+
 app.use(express.static(path.join(__dirname, "public"))); // serve static files from public folder
 app.use("/api", apiRouter); // mount api router
 app.use("/auth", authRouter); // mount auth router
