@@ -256,6 +256,39 @@ router.get("/devices", async (req, res, next) => {
   }
 });
 
+// Format a date as readable Eastern time, e.g. "Oct 8, 2026 at 3:45 PM EDT"
+function easternTime(date) {
+  if (!date) return "never";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).formatToParts(new Date(date));
+  const p = Object.fromEntries(parts.map((x) => [x.type, x.value]));
+  return `${p.weekday}, ${p.month} ${p.day}, ${p.year} at ${p.hour}:${p.minute} ${p.dayPeriod} ${p.timeZoneName}`;
+}
+
+// Short "how long ago" string, e.g. "3 hours ago"
+function timeAgo(date) {
+  if (!date) return "never";
+  const seconds = Math.floor((Date.now() - new Date(date)) / 1000);
+  const units = [
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+  for (const [name, size] of units) {
+    const value = Math.floor(seconds / size);
+    if (value >= 1) return `${value} ${name}${value === 1 ? "" : "s"} ago`;
+  }
+  return "just now";
+}
+
 // GET /api/streak/opens - When did each user last open the app?
 // Derived from device-token re-registration, which fires on every launch.
 router.get("/opens", async (req, res, next) => {
@@ -265,34 +298,38 @@ router.get("/opens", async (req, res, next) => {
       order: [["lastOpenedAt", "DESC"]],
     });
 
+    const place = (d) =>
+      [d.lastCity, d.lastRegion, d.lastCountry].filter(Boolean).join(", ") || "unknown";
+
     // Most recent open per user
-    const lastOpen = {};
-    for (const device of devices) {
-      const user = device.userId;
-      if (!device.lastOpenedAt) continue;
-      if (!lastOpen[user] || device.lastOpenedAt > new Date(lastOpen[user].lastOpenedAt)) {
-        lastOpen[user] = {
-          lastOpenedAt: device.lastOpenedAt,
-          openCount: device.openCount,
-          city: device.lastCity,
-          region: device.lastRegion,
-          country: device.lastCountry,
+    const byUser = {};
+    for (const d of devices) {
+      const user = d.userId;
+      if (!d.lastOpenedAt) continue;
+      if (!byUser[user] || d.lastOpenedAt > new Date(byUser[user]._raw)) {
+        byUser[user] = {
+          lastOpened: easternTime(d.lastOpenedAt),
+          when: timeAgo(d.lastOpenedAt),
+          location: place(d),
+          totalOpens: d.openCount,
+          _raw: d.lastOpenedAt,
         };
       }
     }
 
-    res.json({
-      lastOpen,
-      devices: devices.map((d) => ({
-        userId: d.userId,
-        platform: d.platform,
-        lastOpenedAt: d.lastOpenedAt,
-        openCount: d.openCount,
-        city: d.lastCity,
-        region: d.lastRegion,
-        country: d.lastCountry,
-      })),
-    });
+    // Build a clean per-user summary
+    const summary = {};
+    for (const user of Object.keys(byUser)) {
+      const { _raw, ...rest } = byUser[user];
+      summary[user] = rest;
+    }
+    for (const user of ["frank", "keily"]) {
+      if (!summary[user]) {
+        summary[user] = { lastOpened: "never", when: "never", location: "unknown", totalOpens: 0 };
+      }
+    }
+
+    res.json(summary);
   } catch (error) {
     next(error);
   }
