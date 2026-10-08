@@ -35,9 +35,28 @@ app.use(morgan("dev")); // logging middleware
 // requests arrive, so new tables (e.g. appSessions, widgetPings) may be
 // missing. Sync once per cold start and cache the promise.
 let dbReady = null;
+async function ensureSchema() {
+  // Creates any missing tables (appSessions, widgetPings, ...).
+  await db.sync();
+
+  // db.sync() does NOT add new columns to tables that already exist, so add
+  // the device-open tracking columns explicitly. ADD COLUMN IF NOT EXISTS is
+  // idempotent, so this is safe to run on every cold start.
+  const columns = [
+    '"lastOpenedAt" TIMESTAMP WITH TIME ZONE',
+    '"openCount" INTEGER DEFAULT 0',
+    '"lastCity" VARCHAR(255)',
+    '"lastRegion" VARCHAR(255)',
+    '"lastCountry" VARCHAR(255)',
+    '"lastIp" VARCHAR(255)',
+  ];
+  for (const col of columns) {
+    await db.query(`ALTER TABLE "deviceTokens" ADD COLUMN IF NOT EXISTS ${col};`);
+  }
+}
 app.use(async (req, res, next) => {
   try {
-    if (!dbReady) dbReady = db.sync();
+    if (!dbReady) dbReady = ensureSchema();
     await dbReady;
     next();
   } catch (err) {
