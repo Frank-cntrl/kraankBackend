@@ -178,16 +178,36 @@ router.post("/register-device", async (req, res, next) => {
       return res.status(400).json({ error: "userId and token are required" });
     }
     
+    // The app re-registers its token on every launch, so treat each call as
+    // an "app opened" event and stamp the time + approximate location.
+    const header = (name) => {
+      const value = req.headers[name];
+      return value ? decodeURIComponent(value) : null;
+    };
+    const forwarded = req.headers["x-forwarded-for"];
+    const openInfo = {
+      lastOpenedAt: new Date(),
+      lastCity: header("x-vercel-ip-city"),
+      lastRegion: header("x-vercel-ip-country-region"),
+      lastCountry: header("x-vercel-ip-country"),
+      lastIp: forwarded ? forwarded.split(",")[0].trim() : req.socket?.remoteAddress || null,
+    };
+
     // Upsert the device token
     const [deviceToken, created] = await DeviceToken.findOrCreate({
       where: { userId: userId.toLowerCase(), token },
-      defaults: { platform, isActive: true },
+      defaults: { platform, isActive: true, ...openInfo, openCount: 1 },
     });
-    
+
     if (!created) {
-      await deviceToken.update({ isActive: true, platform });
+      await deviceToken.update({
+        isActive: true,
+        platform,
+        ...openInfo,
+        openCount: (deviceToken.openCount || 0) + 1,
+      });
     }
-    
+
     res.json({ success: true, message: "Device registered for notifications" });
   } catch (error) {
     next(error);
@@ -230,6 +250,48 @@ router.get("/devices", async (req, res, next) => {
         createdAt: d.createdAt,
         tokenPreview: '(hidden for security)'
       }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/streak/opens - When did each user last open the app?
+// Derived from device-token re-registration, which fires on every launch.
+router.get("/opens", async (req, res, next) => {
+  try {
+    const devices = await DeviceToken.findAll({
+      where: { isActive: true },
+      order: [["lastOpenedAt", "DESC"]],
+    });
+
+    // Most recent open per user
+    const lastOpen = {};
+    for (const device of devices) {
+      const user = device.userId;
+      if (!device.lastOpenedAt) continue;
+      if (!lastOpen[user] || device.lastOpenedAt > new Date(lastOpen[user].lastOpenedAt)) {
+        lastOpen[user] = {
+          lastOpenedAt: device.lastOpenedAt,
+          openCount: device.openCount,
+          city: device.lastCity,
+          region: device.lastRegion,
+          country: device.lastCountry,
+        };
+      }
+    }
+
+    res.json({
+      lastOpen,
+      devices: devices.map((d) => ({
+        userId: d.userId,
+        platform: d.platform,
+        lastOpenedAt: d.lastOpenedAt,
+        openCount: d.openCount,
+        city: d.lastCity,
+        region: d.lastRegion,
+        country: d.lastCountry,
+      })),
     });
   } catch (error) {
     next(error);
