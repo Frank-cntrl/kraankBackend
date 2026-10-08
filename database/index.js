@@ -4,6 +4,7 @@ const Photo = require("./photo");
 const Streak = require("./streak");
 const DeviceToken = require("./deviceToken");
 const Video = require("./video");
+const AppSession = require("./appSession");
 
 // Set up associations if needed in the future
 // User.hasMany(Photo, { foreignKey: 'userId' });
@@ -16,4 +17,5 @@ module.exports = {
   Streak,
   DeviceToken,
   Video,
+  AppSession,
 };

@@ -239,7 +239,7 @@ router.get("/devices", async (req, res, next) => {
 // POST /api/streak/test-notification - Debug: Send a test notification
 router.post("/test-notification", async (req, res, next) => {
   try {
-    const { userId } = req.body;
+    const { userId, title, body } = req.body;
     
     if (!userId) {
       return res.status(400).json({ error: "userId is required" });
@@ -247,8 +247,9 @@ router.post("/test-notification", async (req, res, next) => {
     
     const result = await sendPushNotification(
       userId,
-      "🧪 Test Notification",
-      "If you see this, push notifications are working!"
+      title || "🧪 Test Notification",
+      body || "If you see this, push notifications are working!",
+      { type: "custom" }
     );
     
     res.json({ success: true, result });
