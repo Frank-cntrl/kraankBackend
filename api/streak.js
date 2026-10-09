@@ -311,6 +311,7 @@ router.get("/opens", async (req, res, next) => {
           lastOpened: easternTime(d.lastOpenedAt),
           when: timeAgo(d.lastOpenedAt),
           location: place(d),
+          ip: d.lastIp || "unknown",
           totalOpens: d.openCount,
           _raw: d.lastOpenedAt,
         };
@@ -325,7 +326,7 @@ router.get("/opens", async (req, res, next) => {
     }
     for (const user of ["frank", "keily"]) {
       if (!summary[user]) {
-        summary[user] = { lastOpened: "never", when: "never", location: "unknown", totalOpens: 0 };
+        summary[user] = { lastOpened: "never", when: "never", location: "unknown", ip: "unknown", totalOpens: 0 };
       }
     }
 
